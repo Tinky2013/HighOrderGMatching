@@ -10,7 +10,6 @@ class H2GCN(nn.Module):
             self,
             feat_dim: int,
             hidden_dim: int,
-            class_dim: int,
             k: int = 2,
             dropout: float = 0.5,
             use_relu: bool = True
@@ -24,11 +23,22 @@ class H2GCN(nn.Module):
             torch.zeros(size=(feat_dim, hidden_dim)),
             requires_grad=True
         )
-        self.w_classify = nn.Parameter(
-            torch.zeros(size=((2 ** (self.k + 1) - 1) * hidden_dim, class_dim)),
+
+        # self.w_classify = nn.Parameter(
+        #     torch.zeros(size=((2 ** (self.k + 1) - 1) * hidden_dim, class_dim)),
+        #     requires_grad=True
+        # )
+        # self.params = [self.w_embed, self.w_classify]
+        self.w1 = nn.Parameter(
+            torch.zeros(size=((2 ** (self.k + 1) - 1) * hidden_dim, 1)),
             requires_grad=True
         )
-        self.params = [self.w_embed, self.w_classify]
+        self.w0 = nn.Parameter(
+            torch.zeros(size=((2 ** (self.k + 1) - 1) * hidden_dim, 1)),
+            requires_grad=True
+        )
+        self.params = [self.w_embed, self.w1, self.w0]
+
         self.initialized = False
         self.a1 = None
         self.a2 = None
@@ -36,7 +46,8 @@ class H2GCN(nn.Module):
 
     def reset_parameter(self):
         nn.init.xavier_uniform_(self.w_embed)
-        nn.init.xavier_uniform_(self.w_classify)
+        nn.init.xavier_uniform_(self.w0)
+        nn.init.xavier_uniform_(self.w1)
 
     @staticmethod
     def _indicator(sp_tensor: torch.sparse.Tensor) -> torch.sparse.Tensor:
@@ -92,16 +103,30 @@ class H2GCN(nn.Module):
         self.a1 = self._adj_norm(a1)
         self.a2 = self._adj_norm(a2)
 
-    def forward(self, adj: torch.sparse.Tensor, x: FloatTensor) -> FloatTensor:
+    def forward(self, adj, x, t, dt_idx):
+        '''
+        :param adj: torch.sparse.Tensor
+        :param x: FloatTensor
+        :return: FloatTensor:
+        '''
         if not self.initialized:
             self._prepare_prop(adj)
         # H2GCN propagation
-        rs = [self.act(torch.mm(x, self.w_embed))]
+        # feature embedding stage
+        rs = [self.act(torch.mm(x, self.w_embed))]  # (num_nodes, feature_dim) * (feature_dim, hidden_dim)
+        # neighborhood aggregation stage
         for i in range(self.k):
             r_last = rs[-1]
             r1 = torch.spmm(self.a1, r_last)
             r2 = torch.spmm(self.a2, r_last)
             rs.append(self.act(torch.cat([r1, r2], dim=1)))
-        r_final = torch.cat(rs, dim=1)
+        r_final = torch.cat(rs, dim=1)  # formula (7)
         r_final = F.dropout(r_final, self.dropout, training=self.training)
-        return torch.softmax(torch.mm(r_final, self.w_classify), dim=1)
+        # train_test_split
+        r_final, t = r_final[dt_idx], t[dt_idx]
+        # TODO: check the dimension
+        pred_0 = torch.mm(r_final[torch.where(t == 0)[0]], self.w0)
+        pred_1 = torch.mm(r_final[torch.where(t == 1)[0]], self.w1)
+        pred_c0 = torch.mm(r_final[torch.where(t == 1)[0]], self.w0)
+        pred_c1 = torch.mm(r_final[torch.where(t == 0)[0]], self.w1)
+        return pred_0.double(), pred_1.double(), pred_c0.double(), pred_c1.double()

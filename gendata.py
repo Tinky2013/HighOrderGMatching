@@ -46,12 +46,12 @@ def spillover(A, T_binary):
 
     spillover_estim = np.zeros(N)
     for j in range(N):
-        denom = len(friend_dict[str(j)])
+        denom = len(fof_dict[str(j)])
         if denom==0:
             spillover_estim[j] = 0
             continue
-        numer_estim = sum(T_binary[fof_dict[str(j)]])
-        spillover_estim[j] = numer_estim / denom
+        numer = sum(T_binary[fof_dict[str(j)]])
+        spillover_estim[j] = numer / denom
 
     return spillover_estim
 
@@ -65,11 +65,7 @@ def generate_Y(T, spill_estim, Z, set_columns, seed):
     Spill = np.array([i*PARAM['beta2'] for i in spill_estim])
     Spill = Spill[np.newaxis,:].T.astype(float)
     eps = np.random.normal(0, PARAM['epsilon'], size=len(T))[np.newaxis,:].T
-    Logit = PARAM['beta0'] + PARAM['beta1'] * T + Spill + termZ.T + eps
-    # Logit: np.array(num_nodes, 1)
-    # adopt_prob = np.exp(Logit)/(1+np.exp(Logit))
-    # y_next = np.random.binomial(1, p=adopt_prob)
-    y_next = Logit
+    y_next = PARAM['beta0'] + PARAM['beta1'] * T + Spill + termZ.T + eps
     y_next.columns = set_columns
     return y_next
 
@@ -84,7 +80,7 @@ def generate_Y(T, spill_estim, Z, set_columns, seed):
 def main():
     # generate the network A
     z = np.random.uniform(0,1,size=PARAM['num_nodes'])
-    uz = pd.DataFrame(z, columns=['z'])
+    uz = pd.DataFrame(z, columns=['Z'])
     A = generate_network(uz)    # todo: modified network generation
     D = sp.coo_matrix(np.array(A)-np.eye(PARAM['num_nodes']))
     # neighbor = {i: [] for i in range(PARAM['num_nodes'])}
@@ -96,7 +92,7 @@ def main():
     A.to_csv(DATA_PATH['Unet'], index=False)   ## TODO: save files
     # generate y0
     # A, B, D, E
-    T = pd.DataFrame(np.random.normal(PARAM['betaZ']*(z-0.5), 0.5, size=PARAM['num_nodes']), columns=['y0'])  # y(t-1)
+    T = pd.DataFrame(np.random.normal(PARAM['betaZ']*(z-0.5), 0.5, size=PARAM['num_nodes']), columns=['T'])  # y(t-1)
     T_binary = T.copy()
     T_binary[T_binary<0]=0
     T_binary[T_binary>0]=1
@@ -105,8 +101,8 @@ def main():
     spillover_estim = spillover(A, np.array(T_binary).T[0])   # (num_nodes, treat_dim)
 
     # generate y
-    y = pd.DataFrame(generate_Y(T_binary, spillover_estim, uz, set_columns=['y'], seed=seed))
-    spillover_estim = pd.DataFrame(spillover_estim, columns=['influence_estim'])
+    y = pd.DataFrame(generate_Y(T_binary, spillover_estim, uz, set_columns=['Y'], seed=seed))
+    spillover_estim = pd.DataFrame(spillover_estim, columns=['spillover_estim'])
 
     dt_train = pd.concat([uz, T_binary, y, spillover_estim], axis=1)
     dt_train.to_csv(DATA_PATH['save_file'], index=False)   ## TODO: save files

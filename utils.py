@@ -20,6 +20,13 @@ def accuracy(output, labels):
     correct = correct.sum()
     return correct / len(labels)
 
+def evaluate_metric(pred_0, pred_1, pred_c0, pred_c1):
+    tau_pred = torch.cat([pred_1, pred_c1], dim=0) - torch.cat([pred_0, pred_c0], dim=0)
+    tau_true = torch.ones(tau_pred.shape)
+    ePEHE = torch.sqrt(torch.mean(torch.square(tau_pred-tau_true)))
+    eATE = torch.abs(torch.mean(tau_pred) - torch.mean(tau_true))
+    return eATE, ePEHE
+
 
 def load_dataset(name: str, device=None):
     if device is None:
