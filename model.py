@@ -3,7 +3,7 @@ import torch
 import torch.nn.functional as F
 import torch_sparse
 from torch import FloatTensor
-
+from geomloss import SamplesLoss
 
 class H2GCN(nn.Module):
     def __init__(
@@ -124,9 +124,14 @@ class H2GCN(nn.Module):
         r_final = F.dropout(r_final, self.dropout, training=self.training)
         # train_test_split
         r_final, t = r_final[dt_idx], t[dt_idx]
+
+        samples_loss = SamplesLoss(loss="sinkhorn", p=2, blur=0.005, backend="tensorized")
+        imbalance_loss = samples_loss(r1[torch.where(t == 0)[0]], r1[torch.where(t == 1)[0]]) +\
+                         samples_loss(r2[torch.where(t == 0)[0]], r2[torch.where(t == 1)[0]])
+
         # TODO: check the dimension
         pred_0 = torch.mm(r_final[torch.where(t == 0)[0]], self.w0)
         pred_1 = torch.mm(r_final[torch.where(t == 1)[0]], self.w1)
         pred_c0 = torch.mm(r_final[torch.where(t == 1)[0]], self.w0)
         pred_c1 = torch.mm(r_final[torch.where(t == 0)[0]], self.w1)
-        return pred_0.double(), pred_1.double(), pred_c0.double(), pred_c1.double()
+        return pred_0.double(), pred_1.double(), pred_c0.double(), pred_c1.double(), imbalance_loss

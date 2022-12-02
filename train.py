@@ -31,9 +31,10 @@ args = parser.parse_args()
 def train():
     model.train()
     optimizer.zero_grad()
-    pred_0, pred_1, pred_c0, pred_c1 = model(adj, features, t, idx_train)
+    pred_0, pred_1, pred_c0, pred_c1, lbn_loss = model(adj, features, t, idx_train)
     true_0, true_1 = y[torch.where(t[idx_train] == 0)[0]], y[torch.where(t[idx_train] == 1)[0]]
-    loss_train = F.mse_loss(pred_0, true_0.reshape(-1,1)) + F.mse_loss(pred_1, true_1.reshape(-1,1))
+    pred_loss = F.mse_loss(pred_0, true_0.reshape(-1,1)) + F.mse_loss(pred_1, true_1.reshape(-1,1))
+    loss_train = pred_loss + lbn_loss * PARAM['ibn_reg']
 
     loss_train.backward()
     optimizer.step()
@@ -44,10 +45,10 @@ def train():
 def validate():
     model.eval()
     with torch.no_grad():
-        pred_0, pred_1, pred_c0, pred_c1 = model(adj, features, t, idx_val)
+        pred_0, pred_1, pred_c0, pred_c1, lbn_loss = model(adj, features, t, idx_val)
         true_0, true_1 = y[torch.where(t[idx_val] == 0)[0]], y[torch.where(t[idx_val] == 1)[0]]
 
-        loss_val = F.mse_loss(pred_0, true_0.reshape(-1,1)) + F.mse_loss(pred_1, true_1.reshape(-1,1))
+        loss_val = F.mse_loss(pred_0, true_0.reshape(-1,1)) + F.mse_loss(pred_1, true_1.reshape(-1,1)) + lbn_loss * PARAM['ibn_reg']
         # evaluation
         eATE_val, ePEHE_val = evaluate_metric(pred_0, pred_1, pred_c0, pred_c1)
         return loss_val.item(), eATE_val, ePEHE_val
@@ -56,9 +57,9 @@ def test():
     model.load_state_dict(torch.load(checkpoint_path))
     model.eval()
     with torch.no_grad():
-        pred_0, pred_1, pred_c0, pred_c1 = model(adj, features, t, idx_test)
+        pred_0, pred_1, pred_c0, pred_c1, lbn_loss = model(adj, features, t, idx_test)
         true_0, true_1 = y[torch.where(t[idx_test] == 0)[0]], y[torch.where(t[idx_test] == 1)[0]]
-        loss_test = F.mse_loss(pred_0, true_0.reshape(-1,1)) + F.mse_loss(pred_1, true_1.reshape(-1,1))
+        loss_test = F.mse_loss(pred_0, true_0.reshape(-1,1)) + F.mse_loss(pred_1, true_1.reshape(-1,1)) + lbn_loss * PARAM['ibn_reg']
         # evaluation
         eATE_test, ePEHE_test = evaluate_metric(pred_0, pred_1, pred_c0, pred_c1)
         return loss_test.item(), eATE_test, ePEHE_test
@@ -110,6 +111,7 @@ if __name__ == '__main__':
         'network': 'data/synthetic_dt/' + graph + '/net_' + str(i) + '.csv',
         'has_feature': False,
         'num_nodes': 100,
+        'ibn_reg': 10,
     }
 
     t = torch.tensor(np.array(pd.read_csv(PARAM['feature'])['T'])).to(device)
