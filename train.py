@@ -65,8 +65,6 @@ def test():
         return loss_test.item(), eATE_test, ePEHE_test
 
 def main():
-
-
     begin_time = time.time()
     tolerate = 0
     best_loss = 1000
@@ -105,7 +103,6 @@ if __name__ == '__main__':
     graph = 'A_0_3_0.1_100_N'
     i=11
 
-
     PARAM = {
         'feature': 'data/synthetic_dt/' + graph + '/gendt_'+str(i)+'.csv',
         'network': 'data/synthetic_dt/' + graph + '/net_' + str(i) + '.csv',
@@ -129,7 +126,6 @@ if __name__ == '__main__':
             features = features[:, np.newaxis]
     else:
         features = np.eye(PARAM['num_nodes'], PARAM['num_nodes'])
-
 
     # prepare torch_geometric data
     A = np.array(pd.read_csv(PARAM['network']))
